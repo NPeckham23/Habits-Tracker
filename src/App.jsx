@@ -107,8 +107,9 @@ function useLS(key, init) {
 
 // ─── ROOT ─────────────────────────────────────────────────────────────────────
 export default function App() {
-  const [logs, setLogs]         = useLS("hbt-logs",   {});
-  const [customs, setCT]        = useLS("hbt-custom",  []);
+  const [logs, setLogs]         = useLS("hbt-logs",    {});
+  const [customs, setCT]        = useLS("hbt-custom",   []);
+  const [metrics, setMetrics]   = useLS("hbt-metrics",  {});
   const [tab, setTab]           = useState("calendar");
   const [view, setView]         = useState("month");
   const [cursor, setCursor]     = useState(new Date());
@@ -250,6 +251,16 @@ export default function App() {
         </div>
       )}
 
+      {/* ── METRICS HEADER ── */}
+      {tab==="metrics" && (
+        <div style={{position:"sticky",top:0,zIndex:40,background:"#fff",borderBottom:"1px solid #eee",paddingTop:"env(safe-area-inset-top)"}}>
+          <div style={{padding:"16px 16px 14px"}}>
+            <div style={{fontSize:"22px",fontWeight:800,color:"#111"}}>Metrics</div>
+            <div style={{fontSize:"13px",color:"#aaa",marginTop:"2px"}}>Steps · Weight · Savings</div>
+          </div>
+        </div>
+      )}
+
       {/* ── BODY ── */}
       <div style={{padding:"12px 8px"}}>
         {tab==="calendar" && <>
@@ -257,7 +268,8 @@ export default function App() {
           {view==="week"  && <WeekView  cursor={cursor} logs={logs} allTasks={allTasks} highlighted={highlighted} hlGroup={hlGroup} selected={selectedKey} onSelect={selectDay}/>}
           {view==="day"   && <DayColumn cursor={cursor} logs={logs} allTasks={allTasks} selected={selectedKey} onSelect={selectDay}/>}
         </>}
-        {tab==="stats" && <StatsView logs={logs} allTasks={allTasks}/>}
+        {tab==="stats"    && <StatsView logs={logs} allTasks={allTasks}/>}
+        {tab==="metrics"  && <MetricsView metrics={metrics} setMetrics={setMetrics}/>}
       </div>
 
       {/* ── DAY SHEET ── */}
@@ -280,6 +292,7 @@ export default function App() {
       <div style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:"480px",zIndex:50,background:"#fff",borderTop:"1px solid #eee",display:"flex",paddingBottom:"env(safe-area-inset-bottom)"}}>
         {[
           {id:"calendar",emoji:"📅",label:"Calendar"},
+          {id:"metrics", emoji:"📈",label:"Metrics"},
           {id:"stats",   emoji:"📊",label:"Stats"},
         ].map(t => (
           <button key={t.id} onClick={()=>setTab(t.id)} style={{
@@ -643,6 +656,242 @@ function StatCard({ label, value, sub, color }) {
       <div style={{fontSize:"11px",fontWeight:700,color:"#bbb",textTransform:"uppercase",letterSpacing:"0.05em",marginBottom:"4px"}}>{label}</div>
       <div style={{fontSize:"28px",fontWeight:800,color,marginBottom:"2px"}}>{value}</div>
       <div style={{fontSize:"12px",color:"#bbb"}}>{sub}</div>
+    </div>
+  );
+}
+
+// ─── METRICS VIEW ─────────────────────────────────────────────────────────────
+function MetricsView({ metrics, setMetrics }) {
+  const [activeDay, setActiveDay] = useState(TODAY);
+  const [range, setRange]         = useState(30);
+
+  const entry = metrics[activeDay] ?? {};
+
+  function update(field, val) {
+    setMetrics(p => ({
+      ...p,
+      [activeDay]: { ...(p[activeDay] ?? {}), [field]: val === "" ? null : Number(val) },
+    }));
+  }
+
+  // Build last N days for charts
+  const chartDays = useMemo(() => {
+    const now = new Date();
+    return Array.from({ length: range }, (_, i) => {
+      const d = new Date(now); d.setDate(now.getDate() - (range - 1 - i));
+      const k = toKey(d);
+      return { k, d, label: d.getDate() };
+    });
+  }, [range]);
+
+  const stepData   = chartDays.map(d => metrics[d.k]?.steps   ?? null);
+  const weightData = chartDays.map(d => metrics[d.k]?.weight  ?? null);
+  const savingsData= chartDays.map(d => metrics[d.k]?.savings ?? null);
+
+  // Summaries
+  const validSteps   = stepData.filter(v=>v!=null);
+  const validWeight  = weightData.filter(v=>v!=null);
+  const validSavings = savingsData.filter(v=>v!=null);
+  const avgSteps   = validSteps.length   ? Math.round(validSteps.reduce((a,b)=>a+b,0)/validSteps.length)     : null;
+  const latWeight  = weightData.slice().reverse().find(v=>v!=null) ?? null;
+  const latSavings = savingsData.slice().reverse().find(v=>v!=null) ?? null;
+
+  const isToday = activeDay === TODAY;
+  const dayLabel = isToday ? "Today" : fromKey(activeDay).toLocaleDateString("en-GB",{weekday:"short",day:"numeric",month:"short"});
+
+  function shiftDay(dir) {
+    const d = fromKey(activeDay); d.setDate(d.getDate() + dir);
+    if (toKey(d) <= TODAY) setActiveDay(toKey(d));
+  }
+
+  return (
+    <div style={{display:"flex",flexDirection:"column",gap:"12px"}}>
+
+      {/* Summary cards */}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"8px"}}>
+        <MiniCard emoji="👟" label="Avg steps" value={avgSteps!=null?avgSteps.toLocaleString():"—"} color="#378ADD"/>
+        <MiniCard emoji="⚖️" label="Weight" value={latWeight!=null?`${latWeight}kg`:"—"} color="#8E44AD"/>
+        <MiniCard emoji="💰" label="Savings" value={latSavings!=null?`£${latSavings.toLocaleString()}`:"—"} color="#27AE60"/>
+      </div>
+
+      {/* Date picker */}
+      <div style={{background:"#fff",borderRadius:"14px",border:"1px solid #eee",overflow:"hidden"}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 16px",borderBottom:"1px solid #f0f0f0"}}>
+          <button onClick={()=>shiftDay(-1)} style={ICON_BTN}>‹</button>
+          <div style={{textAlign:"center"}}>
+            <div style={{fontSize:"16px",fontWeight:800,color:"#111"}}>{dayLabel}</div>
+            {!isToday && <button onClick={()=>setActiveDay(TODAY)} style={{fontSize:"11px",color:"#5B8DEF",background:"none",border:"none",cursor:"pointer",fontWeight:700,padding:0}}>Go to today</button>}
+          </div>
+          <button onClick={()=>shiftDay(1)} style={{...ICON_BTN, opacity: activeDay===TODAY?0.3:1, cursor:activeDay===TODAY?"default":"pointer"}}>›</button>
+        </div>
+
+        {/* Entry fields */}
+        <div style={{padding:"16px"}}>
+          <MetricField
+            emoji="👟" label="Steps" unit="steps"
+            value={entry.steps ?? ""}
+            onChange={v=>update("steps",v)}
+            color="#378ADD" placeholder="e.g. 8000"
+            inputMode="numeric"
+          />
+          <MetricField
+            emoji="⚖️" label="Weight" unit="kg"
+            value={entry.weight ?? ""}
+            onChange={v=>update("weight",v)}
+            color="#8E44AD" placeholder="e.g. 75.5"
+            inputMode="decimal"
+          />
+          <MetricField
+            emoji="💰" label="Savings" unit="£"
+            value={entry.savings ?? ""}
+            onChange={v=>update("savings",v)}
+            color="#27AE60" placeholder="e.g. 5000"
+            inputMode="decimal" prefix="£"
+          />
+        </div>
+      </div>
+
+      {/* Range picker */}
+      <div style={{display:"flex",background:"#fff",borderRadius:"12px",border:"1px solid #eee",padding:"4px",gap:"4px"}}>
+        {[7,30,90].map(r=>(
+          <button key={r} onClick={()=>setRange(r)} style={{flex:1,padding:"8px",border:"none",borderRadius:"9px",cursor:"pointer",fontSize:"13px",background:range===r?"#111":"transparent",color:range===r?"#fff":"#888",fontWeight:range===r?800:400}}>
+            {r}d
+          </button>
+        ))}
+      </div>
+
+      {/* Steps chart */}
+      {validSteps.length > 0 && (
+        <ChartCard
+          title="Steps" emoji="👟" color="#378ADD" bg="#E6F1FB"
+          days={chartDays} data={stepData}
+          format={v=>v!=null?v.toLocaleString():null}
+          unit="steps"
+        />
+      )}
+
+      {/* Weight chart */}
+      {validWeight.length > 0 && (
+        <ChartCard
+          title="Weight" emoji="⚖️" color="#8E44AD" bg="#F5EEF8"
+          days={chartDays} data={weightData}
+          format={v=>v!=null?`${v}kg`:null}
+          unit="kg" scaleToRange
+        />
+      )}
+
+      {/* Savings chart */}
+      {validSavings.length > 0 && (
+        <ChartCard
+          title="Savings" emoji="💰" color="#27AE60" bg="#E4F9EE"
+          days={chartDays} data={savingsData}
+          format={v=>v!=null?`£${v.toLocaleString()}`:null}
+          unit="£" scaleToRange
+        />
+      )}
+
+      {validSteps.length===0 && validWeight.length===0 && validSavings.length===0 && (
+        <div style={{background:"#fff",borderRadius:"14px",border:"1px solid #eee",padding:"32px 16px",textAlign:"center"}}>
+          <div style={{fontSize:"36px",marginBottom:"10px"}}>📈</div>
+          <div style={{fontSize:"15px",fontWeight:700,color:"#333",marginBottom:"6px"}}>No data yet</div>
+          <div style={{fontSize:"13px",color:"#aaa"}}>Log your steps, weight or savings above and your trends will appear here.</div>
+        </div>
+      )}
+
+      <div style={{height:"8px"}}/>
+    </div>
+  );
+}
+
+function MetricField({ emoji, label, unit, value, onChange, color, placeholder, inputMode, prefix }) {
+  return (
+    <div style={{display:"flex",alignItems:"center",gap:"12px",padding:"10px 0",borderBottom:"1px solid #f5f5f5"}}>
+      <span style={{fontSize:"24px",flexShrink:0}}>{emoji}</span>
+      <div style={{flex:1}}>
+        <div style={{fontSize:"12px",fontWeight:700,color:"#aaa",marginBottom:"4px"}}>{label}</div>
+        <div style={{display:"flex",alignItems:"center",gap:"6px"}}>
+          {prefix && <span style={{fontSize:"15px",fontWeight:700,color:color}}>{prefix}</span>}
+          <input
+            type="number"
+            inputMode={inputMode}
+            value={value}
+            onChange={e=>onChange(e.target.value)}
+            placeholder={placeholder}
+            style={{
+              flex:1, border:"none", borderBottom:`2px solid ${value!==""?color:"#eee"}`,
+              fontSize:"18px", fontWeight:700, color:color,
+              outline:"none", background:"transparent", padding:"2px 0",
+              width:"100%",
+            }}
+          />
+          <span style={{fontSize:"12px",color:"#ccc",flexShrink:0}}>{unit}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ChartCard({ title, emoji, color, bg, days, data, format, scaleToRange }) {
+  const valid = data.filter(v=>v!=null);
+  if (!valid.length) return null;
+  const min = scaleToRange ? Math.min(...valid) * 0.98 : 0;
+  const max = Math.max(...valid) || 1;
+  const range = max - min || 1;
+  const latest = data.slice().reverse().find(v=>v!=null);
+  const H = 72;
+
+  return (
+    <div style={{background:"#fff",borderRadius:"14px",border:"1px solid #eee",padding:"16px"}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"14px"}}>
+        <div style={{fontSize:"13px",fontWeight:700,color:"#333"}}>{emoji} {title}</div>
+        <div style={{fontSize:"16px",fontWeight:800,color,background:bg,padding:"3px 12px",borderRadius:"20px"}}>
+          {format(latest)}
+        </div>
+      </div>
+      {/* SVG bar/line chart */}
+      <svg width="100%" height={H+24} style={{overflow:"visible"}}>
+        {days.map((d,i)=>{
+          const v=data[i];
+          if(v==null) return null;
+          const x=(i/(days.length-1||1))*100;
+          const barH=Math.max(2,((v-min)/range)*H);
+          const y=H-barH;
+          const isActive=d.k===toKey(new Date());
+          return(
+            <g key={d.k}>
+              <rect
+                x={`${x-1}%`} y={y} width="2%" height={barH}
+                rx="2" fill={isActive?color:`${color}66`}
+              />
+            </g>
+          );
+        })}
+        {/* line connecting dots */}
+        {(() => {
+          const pts=days.map((d,i)=>{
+            const v=data[i]; if(v==null)return null;
+            const x=(i/(days.length-1||1))*100;
+            const y=H-Math.max(2,((v-min)/range)*H);
+            return`${x}%,${y}`;
+          }).filter(Boolean);
+          if(pts.length<2)return null;
+          return<polyline points={pts.join(" ")} fill="none" stroke={color} strokeWidth="1.5" strokeOpacity="0.5" strokeLinejoin="round"/>;
+        })()}
+      </svg>
+      <div style={{display:"flex",justifyContent:"space-between",marginTop:"-8px"}}>
+        <span style={{fontSize:"10px",color:"#ccc"}}>{days[0]?.d.toLocaleDateString("en-GB",{day:"numeric",month:"short"})}</span>
+        <span style={{fontSize:"10px",color:"#ccc"}}>Today</span>
+      </div>
+    </div>
+  );
+}
+
+function MiniCard({ emoji, label, value, color }) {
+  return (
+    <div style={{background:"#fff",borderRadius:"14px",border:"1px solid #eee",padding:"12px 10px",textAlign:"center"}}>
+      <div style={{fontSize:"20px",marginBottom:"4px"}}>{emoji}</div>
+      <div style={{fontSize:"16px",fontWeight:800,color,marginBottom:"2px",lineHeight:1.1}}>{value}</div>
+      <div style={{fontSize:"10px",color:"#bbb",fontWeight:600}}>{label}</div>
     </div>
   );
 }
