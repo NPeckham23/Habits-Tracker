@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+
+    <!-- PWA / iPhone -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="My Habits" />
+    <meta name="theme-color" content="#ffffff" />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="apple-touch-icon" href="/icon.png" />
+
+    <title>My Habits</title>
+
+    <style>
+      *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+      html {
+        height: -webkit-fill-available;
+      }
+      body {
+        min-height: 100vh;
+        min-height: -webkit-fill-available;
+        background: #f8f8f8;
+        -webkit-tap-highlight-color: transparent;
+        overscroll-behavior: none;
+      }
+
+      /* Hide scrollbars globally */
+      ::-webkit-scrollbar { display: none; }
+      * { scrollbar-width: none; }
+
+      /* Prevent text selection on tap */
+      button, [role="button"] { user-select: none; -webkit-user-select: none; }
+
+      /* Consistent font rendering */
+      body { -webkit-font-smoothing: antialiased; }
+
+      /* Form elements inherit font */
+      button, input, select, textarea { font-family: inherit; }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
